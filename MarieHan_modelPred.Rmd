@@ -1,0 +1,197 @@
+---
+title: "CherryBlssm_Pred"
+author: "Marie Han"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+Sources for ideal rain fall
+sources for ideal and detrimental temperature
+Things about cherry blossoms, how they are impacted by global warming and what that indicates about general climate trends. 
+
+Before it's able to render, must load the original cherry dataframe into this markdown file so it'll compile all cute and stuff. 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+Loading training data
+```{r}
+cherry <- read.csv("data/washingtondc.csv") |> 
+  bind_rows(read.csv("data/liestal.csv")) |> 
+  bind_rows(read.csv("data/kyoto.csv")) |> 
+  bind_rows(read.csv("data/vancouver.csv")) |> 
+  bind_rows(read.csv("data/nyc.csv"))
+```
+
+Getting the data, loading it into our environment: 
+
+function to grab weather data
+```{r}
+get_ghcn_station= function(station_id, destdir = tempdir()) {
+  base_url= "https://www.ncei.noaa.gov/pub/data/ghcn/daily/by_station/"
+    file_name= paste0(station_id, ".csv.gz")
+    url= paste0(base_url, file_name)
+    destfile= file.path(destdir, file_name)
+    if (!file.exists(destfile)) {
+      download.file(url, destfile, mode = "wb")
+    }
+    data=read.csv(destfile, header = FALSE)
+    data=data[, -c(5:8)]
+    data$Date=as.Date(as.character(data$V2), "%Y%m%d")
+    data$Year=as.integer(format(data$Date, "%Y"))
+    
+    #Pivot to get vars as columns
+    data_wide=data %>%
+      select(Date, Year, V3, V4) %>%
+      pivot_wider(
+        names_from = V3,
+        values_from = V4)
+    
+    # Calculate TAVG if TMAX and TMIN exist
+    if (all(c("TMAX", "TMIN") %in% colnames(data_wide))) {
+      data_wide= data_wide %>%
+        mutate(TAVG = (TMAX + TMIN)/2)
+    }
+    
+    # Keep only the desired elements
+    elements_to_keep= c("TMIN", "TMAX", "TAVG", "PRCP")
+    data_wide= data_wide %>%
+      select(Date, Year, any_of(elements_to_keep))
+    
+    # Remove rows without both TMIN and TMAX
+    data_wide= data_wide %>%
+      filter(!is.na(TMIN) & !is.na(TMAX))
+    
+    return(data_wide)
+}
+
+```
+
+Location data, putting into one dataframe, daily information
+```{r}
+
+
+kyototemp=get_ghcn_station("JA000047759")
+washdc=get_ghcn_station("USW00013743")
+vancouvertemp=get_ghcn_station("CA001108395")
+newyorkcity=get_ghcn_station("USW00014732")
+liestaltemp=get_ghcn_station("SZ000001940")
+
+#Adding a location variable for identification
+kyototemp$location <- "kyoto"
+liestaltemp$location <- "liestal"
+newyorkcity$location <- "newyorkcity"
+vancouvertemp$location <- "vancouver"
+washdc$location <- "washingtondc"
+
+#Now putting them all into one file
+Cherry_day <- bind_rows(kyototemp,liestaltemp, newyorkcity, vancouvertemp, washdc) %>%
+  rename(year = Year)%>% #to match with the original cherry year label 
+  mutate(Date = as.Date(Date),
+         year = as.numeric(format(Date, "%Y")),
+         month = as.numeric(format(Date, "%m")),
+         bloom_year = ifelse(month >= 10, year+1, year)
+         )
+```
+Adding precipitation counter, 
+I wanted to capture the rain accumulation over a week, as an inch per week is considered ideal for cherry tree growth and health. This is also whhere I had to start collapsing each individual day's min/max/average temperature, in order to start looking at things more broadly. Because this is only looking at data starting in october until february,  I was not expecting a lot of really hot weather to begin with, but I wasn't counting out the possibility. 
+```{r}
+#To filter things weekly ###
+Cherry_week <- Cherry_day %>%
+  filter(month >= 10 | month <= 2) %>% 
+  mutate(week = isoweek(Date)
+  ) %>%
+  group_by(location, bloom_year, week) %>%
+  summarise(
+    weekly_PRCP = sum(PRCP),
+    mean_TAVG   = mean(TAVG),
+    min_TAVG    = min(TAVG),
+    max_TAVG    = max(TAVG),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    PRCP_indicator    = ifelse(weekly_PRCP > 254, 1, 0),  # > 254 tenths of mm, as is meausured by data set = 1 inch
+    TooCold_indicator = ifelse(min_TAVG < -29, 1, 0), #more important if it's been too cold for an entire week than just a singular day 
+    TooHot_indicator  = ifelse(max_TAVG > 29, 1, 0)
+  )
+
+
+
+```
+
+Now to make our data usable in the model and prediction, collapsing and summarizing it into a year
+```{r}
+Cherry_Year <- Cherry_week %>%
+  group_by(location,bloom_year) %>%
+  summarize(
+    precipitation = sum(PRCP_indicator),
+    avg_TMAX = mean(max_TAVG),
+    avg_TMIN = mean(min_TAVG),
+    AVG = mean(mean_TAVG),
+    TooCold = sum(TooCold_indicator),
+    TooHot = sum(TooHot_indicator),
+    .groups = "drop"
+) %>%
+  #select(-year) %>%
+  rename(year = bloom_year ) %>%
+  mutate(precipitation = replace_na(precipitation, 0))
+
+```
+
+
+
+First model
+
+Make sure to include that the too hot indicator was insignificant due to it being fall and winter time during predictions. Unlikely to have a random heatwave but not unheard of. 
+```{r}
+model1_TEST <- cherry |>
+  inner_join(Cherry_Year,
+             by = c("location", "year")) |>
+  lm(formula = bloom_doy ~ year * location +  AVG + TooCold+TooHot +precipitation )
+  
+  
+  
+
+summary(model1_TEST)
+```
+
+
+
+```{r}
+###TEST PREDICTIONS
+
+cherry_gridTEST <- expand_grid(location = unique(cherry$location),
+                           year = 1990:2026) |> 
+  inner_join(Cherry_Year,
+             by = c("location", "year"))
+
+predictions2 <- cherry_gridTEST |> 
+  mutate(pred_bloom = predict(model1_TEST, newdata = cherry_gridTEST))
+
+predictions2 |> 
+  left_join(cherry,
+             by = c("location", "year")) |> 
+  ggplot(aes(x = year)) +
+  geom_point(aes(y = bloom_doy)) +
+  geom_line(aes(y = pred_bloom)) +
+  facet_grid(rows = vars(location))
+
+```
+
+
+## Submission
+
+To submit your entries, enter the predicted bloom dates from your models in the submission form.
+```{r}
+
+predictions2 |> 
+  filter(year == 2026) |>
+  mutate(predicted_date= strptime(paste(year,pred_bloom), "%Y %j") |>
+           as_date())
+```
+
+
