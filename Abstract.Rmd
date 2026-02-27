@@ -1,23 +1,25 @@
 ---
 title: "Abstract"
-output: html_document
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
 ---
 
-This study develops a multi-location linear regression model to predict cherry blossom bloom dates using historical climate data and observed flowering records. Bloom timing, measured as day-of-year (DOY), is modeled as a function of temperature, precipitation, long-term temporal trends, and geographic location. Historical bloom data from Washington, DC; Kyoto; Liestal; Vancouver; and New York City were combined with daily weather records obtained from the National Oceanic and Atmospheric Administration (NOAA) Global Historical Climatology Network. Weather observations were retrieved programmatically by station ID and processed to construct consistent daily measures of minimum temperature (TMIN), maximum temperature (TMAX), average temperature (TAVG), and precipitation (PRCP).
-
+This study develops a multi-location linear regression model to predict cherry blossom bloom dates using historical climate data and observed flowering records. Bloom timing, measured as day-of-year (DOY), is modeled as a function of temperature, precipitation, long-term temporal trends, and geographic location. Historical bloom data from Washington, DC; Kyoto; Liestal; Vancouver; and New York City were combined with daily weather records obtained from the NOAA National Centers for Environmental Information (NCEI) Global Historical Climatology Network. Weather observations were retrieved programmatically by station ID and processed to construct consistent daily measures of minimum temperature (TMIN), maximum temperature (TMAX), average temperature (TAVG), and precipitation (PRCP).
 
 Because late fall and winter conditions influence dormancy and pre-bloom development, the analysis focuses on climate data from October through February of each bloom year. Daily observations were aggregated to weekly summaries in order to capture broader environmental patterns rather than short-term fluctuations. Weekly precipitation totals were used to construct an indicator variable identifying weeks exceeding approximately one inch of rainfall, reflecting horticultural guidance that cherry trees perform optimally with consistent weekly moisture. Additional indicator variables were created to capture biologically meaningful temperature thresholds: weeks with average minimum temperatures below −29°C were flagged as “TooCold,” and weeks with average maximum temperatures above 29°C were flagged as “TooHot.” These thresholds reflect the documented resilience range of cherry blossom trees while acknowledging that extreme temperatures may delay development.
 
-
 Weekly summaries were further collapsed into annual location-specific predictors, including the total number of high-precipitation weeks, mean seasonal temperatures, and counts of extreme cold or heat weeks. These yearly climate features were merged with historical bloom observations and used to estimate a linear regression model of the form:
-
 
 bloom_doy ~ year × location + AVG + TooCold + TooHot + precipitation.
 
+Including an interaction between year and location allows long-term trends in bloom timing to vary by city, capturing potential regional climate differences and temporal shifts.
 
-Including an interaction between year and location allows long-term trends in bloom timing to vary by city, capturing potential regional climate differences and temporal shifts. Results indicate that average seasonal temperature and extreme cold exposure meaningfully contribute to explaining bloom variation. The TooHot indicator was statistically insignificant, which is consistent with the seasonal window examined (October–February), during which extreme heat events are uncommon though not impossible. Precipitation effects were modest but contributed to overall explanatory power.
+A complication arose for Vancouver, as the NOAA NCEI station did not report any weather data from September 2025 onward. Since the model relies on October-to-present climate data, this posed a challenge. To address this, publicly available AccuWeather data provided by the course instructor was used instead. Because the AccuWeather records only included January–February 2026, the model for Vancouver was adjusted to use this limited window. While precipitation data was not available in this substitute source, the impact is expected to be minimal given that precipitation was not a significant predictor in the larger multi-location model. This approach still allowed tracking of temperature conditions relevant to bloom timing, particularly exposure to extreme cold.
 
+Results indicate that average seasonal temperature and extreme cold exposure meaningfully contribute to explaining bloom variation. The TooHot indicator was statistically insignificant, which is consistent with the seasonal window examined (October–February), during which extreme heat events are uncommon though not impossible. Precipitation effects were modest but contributed to overall explanatory power.
 
 Model diagnostics and visual comparisons of predicted versus observed bloom dates suggest generally strong fit across locations. However, predictive performance was weaker for New York City and Vancouver, likely due to shorter historical bloom records and reduced sample sizes. The fitted model was subsequently used to generate bloom predictions for each city through 2026, converting predicted day-of-year values into calendar dates for submission.
-Overall, this analysis demonstrates that aggregating fall and winter climate conditions into biologically informed summary measures provides a practical and interpretable framework for forecasting cherry blossom bloom timing. While the linear structure offers clarity and ease of implementation, future work could explore nonlinear temperature accumulation measures or growing degree-day models to further refine predictive accuracy.
 
+Overall, this analysis demonstrates that aggregating fall and winter climate conditions into biologically informed summary measures provides a practical and interpretable framework for forecasting cherry blossom bloom timing. While the linear structure offers clarity and ease of implementation, future work could explore nonlinear temperature accumulation measures or growing degree-day models to further refine predictive accuracy.

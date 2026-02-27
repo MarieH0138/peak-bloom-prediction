@@ -275,9 +275,6 @@ Vancouver: 04/04/2026
 NYC: 04/08/2026
 
 
-The Vancouver problem.
-For some reason the Vancouver station has no reported any weather data since august of 2025, and since my model is specifically built from October to present day, that is a big no-no. To navigate this, I'll be using the basic accuweather data provided by our professor and essentially just doing what the demo analysis does, but only using January - now to predict bloom date. It's not ideal, however I feel a little more comfortable doing this since in my larger model precipitation was not found to be significant, and I can still track when the trees are exposed to temperatures that are detrimental to bloom. 
-
 
 
 
