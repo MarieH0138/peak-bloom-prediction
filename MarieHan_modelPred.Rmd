@@ -84,189 +84,9 @@ newyorkcity$location <- "newyorkcity"
 vancouvertemp$location <- "vancouver"
 washdc$location <- "washingtondc"
 
-#Now putting them all into one file
-Cherry_day <- bind_rows(kyototemp,liestaltemp, newyorkcity, vancouvertemp, washdc) %>%
-  rename(year = Year)%>% #to match with the original cherry year label 
-  mutate(Date = as.Date(Date),
-         year = as.numeric(format(Date, "%Y")),
-         month = as.numeric(format(Date, "%m")),
-         bloom_year = ifelse(month >= 10, year+1, year)
-         )
 
-Cherry_dayTEST <- bind_rows(Cherry_day, vancouver_extra)
-```
-Adding precipitation counter, 
-I wanted to capture the rain accumulation over a week, as an inch per week is considered ideal for cherry tree growth and health. This is also where I had to start collapsing each individual day's min/max/average temperature, in order to start looking at things more broadly. Because this is only looking at data starting in October until February,  I was not expecting a lot of really hot weather to begin with, but I wasn't counting out the possibility. 
-```{r}
-#To filter things weekly ###
-Cherry_week <- Cherry_day %>%
-  filter(month >= 10 | month <= 2) %>% 
-  mutate(week = isoweek(Date)
-  ) %>%
-  group_by(location, bloom_year, week) %>%
-  summarise(
-    weekly_PRCP = sum(PRCP),
-    mean_TAVG   = mean(TAVG),
-    min_TAVG    = min(TAVG),
-    max_TAVG    = max(TAVG),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    PRCP_indicator    = ifelse(weekly_PRCP > 254, 1, 0),  # > 254 tenths of mm, as is meausured by data set = 1 inch
-    TooCold_indicator = ifelse(min_TAVG < -29, 1, 0), #more important if it's been too cold for an entire week than just a singular day 
-    TooHot_indicator  = ifelse(max_TAVG > 29, 1, 0)
-  )
-
-Cherry_weekTEST <- Cherry_dayTEST %>%
-  filter(month >= 10 | month <= 2) %>% 
-  mutate(week = isoweek(Date)
-  ) %>%
-  group_by(location, bloom_year, week) %>%
-  summarise(
-    weekly_PRCP = sum(PRCP,na.rm = TRUE),
-    mean_TAVG   = mean(TAVG),
-    min_TAVG    = min(TAVG),
-    max_TAVG    = max(TAVG),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    PRCP_indicator    = ifelse(weekly_PRCP > 254, 1, 0),  # > 254 tenths of mm, as is meausured by data set = 1 inch
-    TooCold_indicator = ifelse(min_TAVG < -29, 1, 0), #more important if it's been too cold for an entire week than just a singular day 
-    TooHot_indicator  = ifelse(max_TAVG > 29, 1, 0) 
-    
-    )
 
 ```
-
-Now to make our data usable in the model and prediction, collapsing and summarizing it into a year in order to match the original "cherry" format. 
-```{r}
-Cherry_Year <- Cherry_weekTEST %>%
-  group_by(location,bloom_year) %>%
-  summarize(
-    precipitation = sum(PRCP_indicator),
-    avg_TMAX = mean(max_TAVG),
-    avg_TMIN = mean(min_TAVG),
-    AVG = mean(mean_TAVG),
-    TooCold = sum(TooCold_indicator),
-    TooHot = sum(TooHot_indicator),
-    .groups = "drop"
-) %>%
-  #select(-year) %>%
-  rename(year = bloom_year ) %>%
-  mutate(precipitation = replace_na(precipitation, 0))
-
-Cherry_YearTEST <- Cherry_weekTEST %>%
-  group_by(location,bloom_year) %>%
-  summarize(
-    precipitation = sum(PRCP_indicator),
-    avg_TMAX = mean(max_TAVG),
-    avg_TMIN = mean(min_TAVG),
-    AVG = mean(mean_TAVG),
-    TooCold = sum(TooCold_indicator),
-    TooHot = sum(TooHot_indicator),
-    .groups = "drop"
-) %>%
-  #select(-year) %>%
-  rename(year = bloom_year ) %>%
-  mutate(precipitation = replace_na(precipitation, 0))
-
-```
-
-
-
-Model
-
-The too hot indicator was insignificant due to it being fall and winter time during our windowed time frame. It's very unlikely that any of these locations would have a week or more long heatwave, but there is always the possibility. 
-
-```{r}
-model1_TEST <- cherry |>
-  left_join(Cherry_Year,
-             by = c("location", "year")) |>
-  lm(formula = bloom_doy ~ year * location +  AVG + TooCold+TooHot +precipitation )
-  
-
-model1_TROUBLESHOOT <- cherry |>
-  left_join(Cherry_YearTEST,
-             by = c("location", "year")) |>
-  lm(formula = bloom_doy ~ year * location +  AVG + TooCold+TooHot +precipitation )
-  
-
-summary(model1_TEST)
-summary(model1_TROUBLESHOOT)
-```
-
-
-
-```{r}
-###TEST PREDICTIONS
-
-cherry_gridTEST <- expand_grid(location = unique(cherry$location),
-                           year = 1990:2026) |> 
-  inner_join(Cherry_Year,
-             by = c("location", "year"))
-
-predictions2 <- cherry_gridTEST |> 
-  mutate(pred_bloom = predict(model1_TEST, newdata = cherry_gridTEST))
-
-predictions2 |> 
-  left_join(cherry,
-             by = c("location", "year")) |> 
-  ggplot(aes(x = year)) +
-  geom_point(aes(y = bloom_doy)) +
-  geom_line(aes(y = pred_bloom)) +
-  facet_grid(rows = vars(location))
-
-```
-
-
-
-```{r}
-#TROUBLE SHOOT PREDICTIONS FOR VANCOUVER 
-cherry_gridTROUBLESHOOT <- expand_grid(location = unique(cherry$location),
-                           year = 1990:2026) |> 
-  inner_join(Cherry_YearTEST,
-             by = c("location", "year"))
-
-predictions3 <- cherry_gridTROUBLESHOOT |> 
-  mutate(pred_bloom = predict(model1_TROUBLESHOOT, newdata = cherry_gridTROUBLESHOOT))
-
-predictions3 |> 
-  left_join(cherry,
-             by = c("location", "year")) |> 
-  ggplot(aes(x = year)) +
-  geom_point(aes(y = bloom_doy)) +
-  geom_line(aes(y = pred_bloom)) +
-  facet_grid(rows = vars(location))
-
-predictions3 |> 
-  filter(year == 2026) |>
-  mutate(predicted_date= strptime(paste(year,pred_bloom), "%Y %j") |>
-           as_date()) 
-```
-
-## Submission
-
-```{r}
-
-predictions2 |> 
-  filter(year == 2026) |>
-  mutate(predicted_date= strptime(paste(year,pred_bloom), "%Y %j") |>
-           as_date()) 
-```
-
-__Predicted bloom dates as of 02/27/2026__
-
-DC: 04/03/2026 
-
-Liestal: 04/02/2026
-
-Kyoto: 04/01/2026
-
-NYC: 04/08/2026
-
-
-The Vancouver problem.
-For some reason the Vancouver station has no reported any weather data since august of 2025, and since my model is specifically built from October to present day, that is a big no-no. To navigate this, I'll be using the basic accuweather data provided by our professor and essentially just doing what the demo analysis does, but only using January - now to predict bloom date. It's not ideal, however I feel a little more comfortable doing this since in my larger model precipitation was not found to be significant, and I can still track when the trees are exposed to temperatures that are detrimental to bloom. 
 
 ```{r}
 library("rvest")
@@ -318,16 +138,8 @@ vancouver2026<-
             tmin,
             temp = (tmax + tmin) / 2) 
 
-vancouver_binded <- vancouver2025 |> 
-  bind_rows(vancouver2026)  
-
-
-
-```
-
-
-```{r}
-vancouver_extra <- vancouver_binded %>%
+vancouver_binded <- vancouver2025 %>% 
+  bind_rows(vancouver2026)   %>%
   mutate(
     Date = as.Date(date),
     year = year(Date),
@@ -341,6 +153,134 @@ vancouver_extra <- vancouver_binded %>%
   ) %>%
   select(-date, -tmin, -tmax, -temp)
 
+
+
 ```
+
+```{r}
+
+#Now putting them all into one file
+Cherry_day <- bind_rows(kyototemp,liestaltemp, newyorkcity, vancouvertemp, washdc) %>%
+  rename(year = Year)%>% #to match with the original cherry year label 
+  mutate(Date = as.Date(Date),
+         year = as.numeric(format(Date, "%Y")),
+         month = as.numeric(format(Date, "%m")),
+         bloom_year = ifelse(month >= 10, year+1, year)
+         )
+
+#Adding on the vancouver weather data from this year
+Cherry_day <- bind_rows(Cherry_day, vancouver_binded)
+```
+
+Adding precipitation counter, 
+I wanted to capture the rain accumulation over a week, as an inch per week is considered ideal for cherry tree growth and health. This is also where I had to start collapsing each individual day's min/max/average temperature, in order to start looking at things more broadly. Because this is only looking at data starting in October until February,  I was not expecting a lot of really hot weather to begin with, but I wasn't counting out the possibility. 
+```{r}
+#To filter things weekly ###
+Cherry_week <- Cherry_day %>%
+  filter(month >= 10 | month <= 2) %>% 
+  mutate(week = isoweek(Date)
+  ) %>%
+  group_by(location, bloom_year, week) %>%
+  summarise(
+    weekly_PRCP = sum(PRCP,na.rm = TRUE),
+    mean_TAVG   = mean(TAVG),
+    min_TAVG    = min(TAVG),
+    max_TAVG    = max(TAVG),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    PRCP_indicator    = ifelse(weekly_PRCP > 254, 1, 0),  # > 254 tenths of mm, as is meausured by data set = 1 inch
+    TooCold_indicator = ifelse(min_TAVG < -29, 1, 0), #more important if it's been too cold for an entire week than just a singular day 
+    TooHot_indicator  = ifelse(max_TAVG > 29, 1, 0)
+  )
+```
+
+Now to make our data usable in the model and prediction, collapsing and summarizing it into a year in order to match the original "cherry" format. 
+```{r}
+Cherry_Year <- Cherry_week %>%
+  group_by(location,bloom_year) %>%
+  summarize(
+    precipitation = sum(PRCP_indicator),
+    avg_TMAX = mean(max_TAVG),
+    avg_TMIN = mean(min_TAVG),
+    AVG = mean(mean_TAVG),
+    TooCold = sum(TooCold_indicator),
+    TooHot = sum(TooHot_indicator),
+    .groups = "drop"
+) %>%
+  #select(-year) %>%
+  rename(year = bloom_year ) %>%
+  mutate(precipitation = replace_na(precipitation, 0))
+
+```
+
+
+
+Model
+
+The too hot indicator was insignificant due to it being fall and winter time during our windowed time frame. It's very unlikely that any of these locations would have a week or more long heatwave, but there is always the possibility. 
+
+```{r}
+model1<- cherry |>
+  left_join(Cherry_Year,
+             by = c("location", "year")) |>
+  lm(formula = bloom_doy ~ year * location +  AVG + TooCold+TooHot +precipitation )
+
+summary(model1)
+```
+
+
+
+```{r}
+###TEST PREDICTIONS
+cherry_gridTEST <- expand_grid(location = unique(cherry$location),
+                           year = 1990:2026) |> 
+  inner_join(Cherry_Year,
+             by = c("location", "year"))
+
+predictions2 <- cherry_gridTEST |> 
+  mutate(pred_bloom = predict(model1, newdata = cherry_gridTEST))
+
+predictions2 |> 
+  left_join(cherry,
+             by = c("location", "year")) |> 
+  ggplot(aes(x = year)) +
+  geom_point(aes(y = bloom_doy)) +
+  geom_line(aes(y = pred_bloom)) +
+  facet_grid(rows = vars(location))
+
+```
+
+
+## Submission
+
+```{r}
+
+predictions2 |> 
+  filter(year == 2026) |>
+  mutate(predicted_date= strptime(paste(year,pred_bloom), "%Y %j") |>
+           as_date()) 
+```
+
+__Predicted bloom dates as of 02/27/2026__
+
+DC: 04/03/2026 
+
+Liestal: 04/02/2026
+
+Kyoto: 04/01/2026
+
+Vancouver: 04/04/2026
+
+NYC: 04/08/2026
+
+
+The Vancouver problem.
+For some reason the Vancouver station has no reported any weather data since august of 2025, and since my model is specifically built from October to present day, that is a big no-no. To navigate this, I'll be using the basic accuweather data provided by our professor and essentially just doing what the demo analysis does, but only using January - now to predict bloom date. It's not ideal, however I feel a little more comfortable doing this since in my larger model precipitation was not found to be significant, and I can still track when the trees are exposed to temperatures that are detrimental to bloom. 
+
+
+
+
+
 
 
