@@ -6,11 +6,6 @@ output:
   pdf_document: default
   html_document: default
 ---
-Sources for ideal rain fall
-sources for ideal and detrimental temperature
-Things about cherry blossoms, how they are impacted by global warming and what that indicates about general climate trends. 
-
-Before it's able to render, must load the original cherry dataframe into this markdown file so it'll compile all cute and stuff. 
 
 
 ```{r setup, include=FALSE}
@@ -27,9 +22,9 @@ cherry <- read.csv("data/washingtondc.csv") |>
   bind_rows(read.csv("data/nyc.csv"))
 ```
 
-Getting the data, loading it into our environment: 
 
-function to grab weather data
+
+Function to obtain weather data:
 ```{r}
 get_ghcn_station= function(station_id, destdir = tempdir()) {
   base_url= "https://www.ncei.noaa.gov/pub/data/ghcn/daily/by_station/"
@@ -71,7 +66,8 @@ get_ghcn_station= function(station_id, destdir = tempdir()) {
 
 ```
 
-Location data, putting into one dataframe, daily information
+
+Weather by location, putting it into one "daily" dataframe.
 ```{r}
 
 
@@ -98,7 +94,7 @@ Cherry_day <- bind_rows(kyototemp,liestaltemp, newyorkcity, vancouvertemp, washd
          )
 ```
 Adding precipitation counter, 
-I wanted to capture the rain accumulation over a week, as an inch per week is considered ideal for cherry tree growth and health. This is also whhere I had to start collapsing each individual day's min/max/average temperature, in order to start looking at things more broadly. Because this is only looking at data starting in october until february,  I was not expecting a lot of really hot weather to begin with, but I wasn't counting out the possibility. 
+I wanted to capture the rain accumulation over a week, as an inch per week is considered ideal for cherry tree growth and health. This is also whhere I had to start collapsing each individual day's min/max/average temperature, in order to start looking at things more broadly. Because this is only looking at data starting in October until February,  I was not expecting a lot of really hot weather to begin with, but I wasn't counting out the possibility. 
 ```{r}
 #To filter things weekly ###
 Cherry_week <- Cherry_day %>%
@@ -123,7 +119,7 @@ Cherry_week <- Cherry_day %>%
 
 ```
 
-Now to make our data usable in the model and prediction, collapsing and summarizing it into a year
+Now to make our data usable in the model and prediction, collapsing and summarizing it into a year in order to match the original "cherry" format. 
 ```{r}
 Cherry_Year <- Cherry_week %>%
   group_by(location,bloom_year) %>%
@@ -144,9 +140,10 @@ Cherry_Year <- Cherry_week %>%
 
 
 
-First model
+Model
 
-Make sure to include that the too hot indicator was insignificant due to it being fall and winter time during predictions. Unlikely to have a random heatwave but not unheard of. 
+The too hot indicator was insignificant due to it being fall and winter time during our windowed time frame. It's very unlikely that any of these locations would have a week or more long heatwave, but there is always the possibility. 
+
 ```{r}
 model1_TEST <- cherry |>
   inner_join(Cherry_Year,
@@ -185,7 +182,6 @@ predictions2 |>
 
 ## Submission
 
-To submit your entries, enter the predicted bloom dates from your models in the submission form.
 ```{r}
 
 predictions2 |> 
@@ -194,4 +190,12 @@ predictions2 |>
            as_date())
 ```
 
+__Predicted bloom dates__
 
+DC: 04/03/2026
+
+Liestal: 04/02/2026
+
+Kyoto: 04/01/2026
+
+NYC: 04/08/2026
