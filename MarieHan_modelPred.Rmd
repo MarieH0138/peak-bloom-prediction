@@ -190,7 +190,7 @@ predictions2 |>
            as_date())
 ```
 
-__Predicted bloom dates__
+__Predicted bloom dates as of 02/27/2026__
 
 DC: 04/03/2026
 
